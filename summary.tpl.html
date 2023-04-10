@@ -1,0 +1,97 @@
+<h2>Overview</h2>
+
+{{stats.deps | length }} module dependencies with a total of {{ total_versions }}
+distinct versions.
+
+{{ stats.num_iocs }} total IOCs.
+
+<h3>Overall statistics</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th>Count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>IOCs</td>
+      <td>{{ stats.num_iocs }}</td>
+    </tr>
+    <tr>
+      <td>Modules in use</td>
+      <td>{{ stats.deps | length }}</td>
+    </tr>
+    <tr>
+      <td>Module versions</td>
+      <td>{{ total_versions }}</td>
+    </tr>
+    <tr>
+      <td>RELEASE files</td>
+      <td>{{ stats.num_release_files }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Modules</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Module</th>
+      <th>Application Count</th>
+      <th>IOC Count</th>
+      <th>Versions in use</th>
+    </tr>
+  </thead>
+  <tbody>
+{% for dep in deps_by_release_file_count %}
+    <tr>
+      <td>{{ dep.name }}</td>
+      <td>{{ dep.by_release_file | length }}</td>
+      <td>{{ dep.by_ioc_name | length }}</td>
+      <td>{{ dep_versions[dep.name] | length }}</td>
+    </tr>
+{% endfor %}
+  </tbody>
+</table>
+
+
+{% for dep in deps_by_release_file_count %}
+
+<h2>{{ dep.name }}</h2>
+
+  {{dep.name}} used by {{dep.by_release_file|length}} release files 
+  (applications) and {{dep.by_ioc_name|length}} IOCs 
+  with a total of {{dep.by_version|length}} versions in use.
+  <br/>
+
+<table>
+  <thead>
+    <tr>
+      <th>Module Version</th>
+      <th>EPICS Base</th>
+      <th>Usage count</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for version, release_files in dep_versions[dep.name] %}
+    <tr>
+      <td>
+        <a target="_blank" href="{{ version.url }}">
+          {{ version.tag }}
+        </a>
+      </td>
+      <td>
+        <a target="_blank" href="{{ version.base_url }}">
+          {{ version.base }}
+        </a>
+      </td>
+      <td>{{ release_files | length}}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endfor %}
