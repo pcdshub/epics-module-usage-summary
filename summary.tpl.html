@@ -5,6 +5,26 @@ distinct versions.
 
 {{ stats.num_iocs }} total IOCs.
 
+<h3>EPICS base statistics</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Base version</th>
+      <th>Application count</th>
+      <th>IOC count</th>
+    </tr>
+  </thead>
+  <tbody>
+{% for base_version, release_files in stats.apps_by_base_version | dictsort %}
+    <tr>
+      <td>{{ base_version }}</td>
+      <td>{{ release_files | length }}</td>
+      <td>{{ stats.iocs_by_base_version[base_version] | length }}</td>
+    </tr>
+{% endfor %}
+  </tbody>
+</table>
 <h3>Overall statistics</h3>
 
 <table>
@@ -62,7 +82,7 @@ distinct versions.
 
 <h2>{{ dep.name }}</h2>
 
-  {{dep.name}} used by {{dep.by_release_file|length}} release files 
+  {{dep.name}} is specified in {{dep.by_release_file|length}} release files 
   (applications) and {{dep.by_ioc_name|length}} IOCs 
   with a total of {{dep.by_version|length}} versions in use.
   <br/>
@@ -88,7 +108,18 @@ distinct versions.
           {{ version.base }}
         </a>
       </td>
-      <td>{{ release_files | length}}</td>
+      <td>
+        <details>
+          <summary>
+            {{ release_files | length}}
+          </summary>
+          <ul>
+          {% for release_file in release_files %}
+            <li><pre>{{ release_file.filename }}</pre></li>
+          {% endfor %}
+          </ul>
+        </details>
+      </td>
     </tr>
     {% endfor %}
   </tbody>

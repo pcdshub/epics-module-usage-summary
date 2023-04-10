@@ -3,6 +3,7 @@ from __future__ import annotations
 import collections
 import dataclasses
 import json
+import logging
 import pathlib
 import re
 import string
@@ -16,6 +17,8 @@ try:
 except ImportError:
     from typing_extensions import Self
 
+
+logger = logging.getLogger(__name__)
 
 EPICS_SITE_TOP = pathlib.Path("/cds/group/pcds/epics")
 IOC_APPL_TOP = re.compile(r"IOC_APPL_TOP\s*=\s*(.*)$")
@@ -79,25 +82,38 @@ class VersionInfo:
         )
         for base_path in (
             "/cds/group/pcds/epics",
-            "/reg/g/pcds/epics",
-            "/reg/g/pcds/package/epics",
+            "/cds/group/pcds/package/epics",
         )
     ] + [
         # /reg/g/pcds/epics/modules/xyz/ver
         re.compile(
-            r"/reg/g/pcds/epics/modules/"
+            r"/cds/group/pcds/epics/modules/"
             r"(?P<name>[^/]+)/" 
             r"(?P<tag>[^/]+)/?",
         ),
         re.compile(
-            r"/reg/g/pcds/epics-dev/modules/"
+            r"/cds/group/pcds/epics-dev/modules/"
             r"(?P<name>[^/]+)/" 
             r"(?P<tag>[^/]+)/?",
         ),
         re.compile(
-            r"/reg/g/pcds/package/epics/"
+            r"/cds/group/pcds/package/epics/"
             r"(?P<base>[^/]+)/"
             r"module/"
+            r"(?P<name>[^/]+)/" 
+            r"(?P<tag>[^/]+)/?",
+        ),
+        re.compile(
+            r"/afs/slac/g/lcls/epics/"
+            r"(?P<base>[^/]+)/"
+            r"modules/"
+            r"(?P<name>[^/]+)/" 
+            r"(?P<tag>[^/]+)/?",
+        ),
+        re.compile(
+            r"/afs/slac.stanford.edu/g/lcls/vol8/epics/"
+            r"(?P<base>[^/]+)/"
+            r"modules/"
             r"(?P<name>[^/]+)/" 
             r"(?P<tag>[^/]+)/?",
         ),
@@ -123,12 +139,12 @@ class VersionInfo:
     @classmethod
     def from_path(cls: type[Self], path: pathlib.Path) -> Self | None:
         path_str = str(path.resolve())
+        path_str = path_str.replace("/reg/g/pcds", "/cds/group/pcds")
         # TODO some sort of configuration
         for regex in cls._module_path_regexes_:
             match = regex.match(path_str)
-            if match is None:
-                continue
-            return cls(**match.groupdict())
+            if match is not None:
+                return cls(**match.groupdict())
         return None
 
 
@@ -138,10 +154,15 @@ def get_variables(contents: str) -> dict[str, str]:
     variables = {}
     for line in contents.splitlines():
         line = line.rstrip()
-        if "=" not in line or line.lstrip().startswith("#"):
+        if "=" not in line or line.lstrip().startswith("#") or line.lstrip().startswith("$"):
             continue
         var, value = line.split("=", 1)
-        variables[var.strip()] = value.strip()
+        var = var.rstrip(" ?:\t")
+        value = value.strip()
+        if value.startswith("$(shell "):
+            logger.debug("Skipping shell-defined values")
+            continue
+        variables[var.strip()] = value
     return variables
 
 
@@ -150,12 +171,21 @@ def expand(line: str, variables: dict[str, str]) -> str:
     line = line.replace("$(", "${")
     line = line.replace(")", "}")
     assert line.count("{") == line.count("}")
-    return string.Template(line).substitute(variables)
+    if "${shell" in line:
+        return line
+
+    try:
+        return string.Template(line).substitute(variables)
+    except ValueError:
+        raise ValueError(
+            f"Template substitution hack failed: line={line!r} (variables={variables})"
+        )
 
 
 def get_dep_to_version(
-    contents: str, defined: dict[str, str]
-) -> dict[str, VersionInfo]:
+    contents: str,
+    defined: dict[str, str],
+) -> tuple[dict[str, str], dict[str, VersionInfo]]:
     """
     For a given RELEASE file contents, generate a VersionInfo dictionary.
 
@@ -168,9 +198,12 @@ def get_dep_to_version(
 
     Returns
     -------
+    dict[str, str]
+        All defined variables that were used.
     dict[str, VersionInfo]
+        Variable to version information.
     """
-    ignore_vars = {
+    variables_without_versions = {
         "MY_MODULES",
         "EPICS_MODULES",
         "EPICS_DEV_MODULES",
@@ -180,12 +213,27 @@ def get_dep_to_version(
         "TEMPLATE_TOP",  # TODO
         "RULES",
         "CONFIG",
+        "BASE_SITE_TOP",
+        "PSPKG_ROOT",
+        "PACKAGE_SITE_TOP",
+        "MATLAB_PACKAGE_TOP",
+        "MSI",
+        "EPICS_SITE_TOP",
+        "ALARM_CONFIGS_TOP",
     }
+    values_to_ignore = {
+        "/epics-dev/bosum123/ek",
+        "/reg/g/pcds/pyps",
+        "/afs/slac/g/lcls/tools",
+        "/reg/g/pcds/pkg_mgr",
+        "/afs/slac/g/lcls/tools/AlarmConfigsTop",
+    }
+
     defined.setdefault("BASE_MODULE_VERSION", "R7.0.2-2.?")
-    defined.setdefault("EPICS_SITE_TOP", "/reg/g/pcds/epics")
-    defined.setdefault("EPICS_BASE", "/reg/g/pcds/epics/base/R7.0.2-2.?")
-    defined.setdefault("EPICS_MODULES", "/reg/g/pcds/epics/R7.0.2-2.0/modules")
-    defined.setdefault("EPICS_MODULES_DEV", "/reg/g/pcds/epics/R7.0.2-2.0/modules")
+    defined.setdefault("EPICS_SITE_TOP", "/cds/group/pcds/epics")
+    defined.setdefault("EPICS_BASE", "/cds/group/pcds/epics/base/R7.0.2-2.?")
+    defined.setdefault("EPICS_MODULES", "/cds/group/pcds/epics/R7.0.2-2.0/modules")
+    defined.setdefault("EPICS_MODULES_DEV", "/cds/group/pcds/epics/R7.0.2-2.0/modules")
 
     variables = get_variables(contents)
     defined.update(variables)
@@ -205,22 +253,23 @@ def get_dep_to_version(
             version = VersionInfo.from_path(pathlib.Path(value))
             if var == "EPICS_BASE":
                 ...
-            elif var in ignore_vars:
+            elif var in variables_without_versions:
                 ...
             elif "SCREENS" in var:
                 ...
             elif "/home" in value:
                 print("Found home path", var, value, file=sys.stderr)
-            elif "/epics-dev/bosum123/ek" in value:
-                print("weird dev path", var, value, file=sys.stderr)
+            elif any(ignored in value for ignored in values_to_ignore):
+                ...
+            elif var.endswith("_SITE_TOP"):
+                ...
             elif version is None:
                 print("Found unhandled path semantics?", var, value, version, file=sys.stderr)
-                # raise
             else:
                 # print("->", version)
                 versions[var] = version
 
-    return versions
+    return variables, versions
 
 
 @dataclasses.dataclass
@@ -228,19 +277,41 @@ class ReleaseFile:
     """Represents a single RELEASE file with its module dependencies."""
 
     filename: pathlib.Path
+    variables: dict[str, str]
     dep_to_version: dict[str, VersionInfo]
 
     def __hash__(self):
         return hash(self.filename)
 
+    def get_base_tag(self) -> str:
+        if "BASE_MODULE_VERSION" in self.variables:
+            return self.variables["BASE_MODULE_VERSION"]
+        if "EPICS_BASE" in self.variables:
+            base_version = VersionInfo.from_path(
+                pathlib.Path(self.variables["EPICS_BASE"])
+            )
+            return base_version.tag if base_version else "unknown"
+        print("Unknown base", self, file=sys.stderr)
+        return "unknown"
+
     @classmethod
     def parse(cls: type[Self], filename: pathlib.Path) -> Self:
-        with open(filename) as fp:
-            contents = fp.read()
+        try:
+            release_site = find_release_site_from_configure(filename.parent)
+        except ValueError:
+            site_contents = ""
+        else:
+            with open(release_site) as fp:
+                site_contents = fp.read()
 
+        with open(filename) as fp:
+            contents = "\n".join((site_contents, fp.read()))
+
+        variables, dep_to_version = get_dep_to_version(contents, {})
         return ReleaseFile(
             filename=filename,
-            dep_to_version=get_dep_to_version(contents, {}),
+            variables=variables,
+            dep_to_version=dep_to_version,
         )
 
 
@@ -260,6 +331,12 @@ class Dependency:
 class Statistics:
     """Statistics tracker for all module dependencies."""
 
+    apps_by_base_version: DefaultDict[str, set[ReleaseFile]] = dataclasses.field(
+        default_factory=lambda: collections.defaultdict(set)
+    )
+    iocs_by_base_version: DefaultDict[str, set[str]] = dataclasses.field(
+        default_factory=lambda: collections.defaultdict(set)
+    )
     deps: DefaultDict[str, Dependency] = dataclasses.field(
         default_factory=lambda: collections.defaultdict(Dependency)
     )
@@ -297,6 +374,10 @@ def add_to_stats(stats: Statistics, release_file: ReleaseFile, ioc_name: str):
     release_file : ReleaseFile
     ioc_name : str
     """
+
+    base_tag = release_file.get_base_tag()
+    stats.apps_by_base_version[base_tag].add(release_file)
+    stats.iocs_by_base_version[base_tag].add(ioc_name)
     for var, version in release_file.dep_to_version.items():
         stats.deps[var].name = var
         stats.deps[var].by_ioc_name.add(ioc_name)
@@ -372,6 +453,28 @@ def find_release_file_from_boot_path(boot_path: pathlib.Path) -> pathlib.Path:
     raise ValueError(f"Unable to find RELEASE file for boot path {boot_path}")
 
 
+def find_release_site_from_configure(configure_path: pathlib.Path) -> pathlib.Path:
+    """
+    Find a RELEASE file given a specific IOC boot path.
+
+    Parameters
+    ----------
+    boot_path : pathlib.Path
+
+    Returns
+    -------
+    pathlib.Path
+    """
+    path = configure_path.resolve()
+    while len(path.parts) > 2:
+        release_site_path = path / "RELEASE_SITE"
+        if release_site_path.exists():
+            return release_site_path
+        path = path.parent
+
+    raise ValueError(f"Unable to find RELEASE_SITE file for path {configure_path}")
+
+
 def get_release_file_from_ioc(info: WhatrecordMetadata) -> pathlib.Path:
     """
     Get the path of the RELEASE file for a provided set of metadata.
@@ -404,6 +507,10 @@ def get_release_file_from_ioc(info: WhatrecordMetadata) -> pathlib.Path:
         except ValueError:
             raise ReleaseFileNotFoundError(f"No release file for IOC: {boot_path} and {binary_path}") from None
 
+    # Let's normalize paths to use /cds/group/pcds instead of /reg/g/pcds
+    if release_file.parts[:4] == ("/", "reg", "g", "pcds"):
+        release_file = pathlib.Path("/cds/group/pcds") / pathlib.Path(*release_file.parts[4:])
+
     return release_file
     
 
@@ -424,7 +531,7 @@ def print_summary(stats: Statistics, fp=sys.stderr) -> None:
     ):
         print(
             (
-                f"{dep.name} used by {len(dep.by_release_file)} release files "
+                f"{dep.name} is used by {len(dep.by_release_file)} release files "
                 f"(applications) and {len(dep.by_ioc_name)} IOCs "
                 f"with a total of {len(dep.by_version)} versions in use")
             ,
