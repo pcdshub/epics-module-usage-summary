@@ -63,7 +63,6 @@ class WhatrecordMetadata(TypedDict):
     script: str
 
 
-
 @dataclasses.dataclass(frozen=True)
 class VersionInfo:
     """Version information."""
@@ -88,33 +87,33 @@ class VersionInfo:
         # /reg/g/pcds/epics/modules/xyz/ver
         re.compile(
             r"/cds/group/pcds/epics/modules/"
-            r"(?P<name>[^/]+)/" 
+            r"(?P<name>[^/]+)/"
             r"(?P<tag>[^/]+)/?",
         ),
         re.compile(
             r"/cds/group/pcds/epics-dev/modules/"
-            r"(?P<name>[^/]+)/" 
+            r"(?P<name>[^/]+)/"
             r"(?P<tag>[^/]+)/?",
         ),
         re.compile(
             r"/cds/group/pcds/package/epics/"
             r"(?P<base>[^/]+)/"
             r"module/"
-            r"(?P<name>[^/]+)/" 
+            r"(?P<name>[^/]+)/"
             r"(?P<tag>[^/]+)/?",
         ),
         re.compile(
             r"/afs/slac/g/lcls/epics/"
             r"(?P<base>[^/]+)/"
             r"modules/"
-            r"(?P<name>[^/]+)/" 
+            r"(?P<name>[^/]+)/"
             r"(?P<tag>[^/]+)/?",
         ),
         re.compile(
             r"/afs/slac.stanford.edu/g/lcls/vol8/epics/"
             r"(?P<base>[^/]+)/"
             r"modules/"
-            r"(?P<name>[^/]+)/" 
+            r"(?P<name>[^/]+)/"
             r"(?P<tag>[^/]+)/?",
         ),
     ]
@@ -512,7 +511,6 @@ def get_release_file_from_ioc(info: WhatrecordMetadata) -> pathlib.Path:
         release_file = pathlib.Path("/cds/group/pcds") / pathlib.Path(*release_file.parts[4:])
 
     return release_file
-    
 
 
 def print_summary(stats: Statistics, fp=sys.stderr) -> None:
@@ -575,10 +573,10 @@ def format_template(stats: Statistics, template_filename: pathlib.Path) -> str:
             key=by_total_version_count,
             reverse=True,
         )
-  
+
     with open(template_filename) as fp:
         template = jinja2.Template(fp.read())
-   
+
     total_versions = sum(len(dep.by_version) for dep in stats.deps.values())
     return template.render(
         stats=stats,
