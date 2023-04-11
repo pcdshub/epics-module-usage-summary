@@ -1,30 +1,6 @@
-<h2>Overview</h2>
+Found {{ stats.num_iocs }} total IOCs with {{stats.deps | length }} module dependencies. <br/>
+A combined total of {{ total_versions }} distinct module versions were found. <br/>
 
-{{stats.deps | length }} module dependencies with a total of {{ total_versions }}
-distinct versions.
-
-{{ stats.num_iocs }} total IOCs.
-
-<h3>EPICS base statistics</h3>
-
-<table>
-  <thead>
-    <tr>
-      <th>Base version</th>
-      <th>Application count</th>
-      <th>IOC count</th>
-    </tr>
-  </thead>
-  <tbody>
-{% for base_version, release_files in stats.apps_by_base_version | dictsort %}
-    <tr>
-      <td>{{ base_version }}</td>
-      <td>{{ release_files | length }}</td>
-      <td>{{ stats.iocs_by_base_version[base_version] | length }}</td>
-    </tr>
-{% endfor %}
-  </tbody>
-</table>
 <h3>Overall statistics</h3>
 
 <table>
@@ -51,6 +27,31 @@ distinct versions.
       <td>RELEASE files</td>
       <td>{{ stats.num_release_files }}</td>
     </tr>
+    <tr>
+      <td>EPICS base versions</td>
+      <td>{{ stats.apps_by_base_version | length }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>EPICS base statistics</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Base version</th>
+      <th>Application count</th>
+      <th>IOC count</th>
+    </tr>
+  </thead>
+  <tbody>
+{% for base_version, release_files in stats.apps_by_base_version | dictsort %}
+    <tr>
+      <td>{{ base_version }}</td>
+      <td>{{ release_files | length }}</td>
+      <td>{{ stats.iocs_by_base_version[base_version] | length }}</td>
+    </tr>
+{% endfor %}
   </tbody>
 </table>
 
@@ -82,9 +83,10 @@ distinct versions.
 
 <h2>{{ dep.name }}</h2>
 
-  {{dep.name}} is specified in {{dep.by_release_file|length}} release files
-  (applications) and {{dep.by_ioc_name|length}} IOCs
-  with a total of {{dep.by_version|length}} versions in use.
+  <br/>
+  {{dep.name}} is specified in {{dep.by_release_file|length}} applications and {{dep.by_ioc_name|length}} IOCs.
+  <br/>
+  A total of {{dep.by_version|length}} {{ dep.name }} versions are currently in use.
   <br/>
 
 <table>
