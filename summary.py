@@ -24,6 +24,20 @@ EPICS_SITE_TOP = pathlib.Path("/cds/group/pcds/epics")
 IOC_APPL_TOP = re.compile(r"IOC_APPL_TOP\s*=\s*(.*)$")
 
 
+def normalize_path(path: pathlib.Path) -> pathlib.Path:
+    """
+    Normalize paths to use /cds/group/pcds instead of /reg/g/pcds.
+    """
+    last_path = None
+    while path != last_path:
+        last_path = path
+        path = path.expanduser().resolve()
+        if path.parts[:4] == ("/", "reg", "g", "pcds"):
+            path = pathlib.Path("/cds/group/pcds") / pathlib.Path(*path.parts[4:])
+
+    return path
+
+
 class ExpectedFindReleaseFileError(Exception):
     ...
 
@@ -289,8 +303,14 @@ class ReleaseFile:
             base_version = VersionInfo.from_path(
                 pathlib.Path(self.variables["EPICS_BASE"])
             )
-            return base_version.tag if base_version else "unknown"
-        print("Unknown base", self, file=sys.stderr)
+            if base_version is not None:
+                return base_version.tag
+
+        for version in self.dep_to_version.values():
+            if version.base != "?":
+                return version.base
+
+        print("Unknown base version", self, file=sys.stderr)
         return "unknown"
 
     @classmethod
@@ -506,11 +526,7 @@ def get_release_file_from_ioc(info: WhatrecordMetadata) -> pathlib.Path:
         except ValueError:
             raise ReleaseFileNotFoundError(f"No release file for IOC: {boot_path} and {binary_path}") from None
 
-    # Let's normalize paths to use /cds/group/pcds instead of /reg/g/pcds
-    if release_file.parts[:4] == ("/", "reg", "g", "pcds"):
-        release_file = pathlib.Path("/cds/group/pcds") / pathlib.Path(*release_file.parts[4:])
-
-    return release_file
+    return normalize_path(release_file)
 
 
 def print_summary(stats: Statistics, fp=sys.stderr) -> None:
