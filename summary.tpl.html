@@ -69,7 +69,11 @@ A combined total of {{ total_versions }} distinct module versions were found. <b
   <tbody>
 {% for dep in deps_by_release_file_count %}
     <tr>
-      <td>{{ dep.name }}</td>
+      <td>
+        <a href="#{{ dep.name }}">
+          {{ dep.name }}
+        </a>
+      </td>
       <td>{{ dep.by_release_file | length }}</td>
       <td>{{ dep.by_ioc_name | length }}</td>
       <td>{{ dep_versions[dep.name] | length }}</td>
@@ -81,12 +85,14 @@ A combined total of {{ total_versions }} distinct module versions were found. <b
 
 {% for dep in deps_by_release_file_count %}
 
-<h2>{{ dep.name }}</h2>
+<h2 id="{{dep.name}}">{{ dep.name }}</h2>
 
   <br/>
   {{dep.name}} is specified in {{dep.by_release_file|length}} applications and {{dep.by_ioc_name|length}} IOCs.
   <br/>
   A total of {{dep.by_version|length}} {{ dep.name }} versions are currently in use.
+  <br/>
+  This module is referred to using the following variable name(s): {{ dep.variables | join(", " )}}
   <br/>
 
 <table>
@@ -132,3 +138,13 @@ A combined total of {{ total_versions }} distinct module versions were found. <b
 </table>
 
 {% endfor %}
+
+<h3>About these statistics</h3>
+
+This data is generated daily on a personal cron job.<br/>
+
+Script source on <a href="github.com/pcdshub/epics-module-usage-summary/">GitHub</a> or locally:
+<pre>/cds/home/k/klauer/Repos/module-summary</pre>
+
+Cron job entrypoint:
+<pre>/cds/home/k/klauer/Repos/cron/update_module_usage.sh</pre><br/>

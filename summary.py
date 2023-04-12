@@ -134,9 +134,15 @@ class VersionInfo:
 
     @property
     def base_url(self) -> str:
-        looks_like_a_branch = self.base.count(".") == 3
-        if looks_like_a_branch:
-            return f"https://github.com/slac-epics/epics-base/tree/{self.base}.branch"
+        try:
+            slac_tag = self.base.split("-")[1]
+            looks_like_a_branch = slac_tag.count(".") < 2
+        except Exception:
+            pass
+        else:
+            if looks_like_a_branch:
+                base = self.base.rstrip("0.")
+                return f"https://github.com/slac-epics/epics-base/tree/{base}.branch"
         return f"https://github.com/slac-epics/epics-base/releases/tag/{self.base}"
 
     @property
@@ -339,6 +345,7 @@ class Dependency:
     """A dependency tracked in the Statistics class."""
 
     name: str = ""
+    variables: set[str] = dataclasses.field(default_factory=set)
     by_ioc_name: set[str] = dataclasses.field(default_factory=set)
     by_release_file: set[ReleaseFile] = dataclasses.field(default_factory=set)
     by_version: DefaultDict[VersionInfo, set[ReleaseFile]] = dataclasses.field(
@@ -398,10 +405,11 @@ def add_to_stats(stats: Statistics, release_file: ReleaseFile, ioc_name: str):
     stats.apps_by_base_version[base_tag].add(release_file)
     stats.iocs_by_base_version[base_tag].add(ioc_name)
     for var, version in release_file.dep_to_version.items():
-        stats.deps[var].name = var
-        stats.deps[var].by_ioc_name.add(ioc_name)
-        stats.deps[var].by_release_file.add(release_file)
-        stats.deps[var].by_version[version].add(release_file)
+        stats.deps[version.name].name = version.name
+        stats.deps[version.name].variables.add(var)
+        stats.deps[version.name].by_ioc_name.add(ioc_name)
+        stats.deps[version.name].by_release_file.add(release_file)
+        stats.deps[version.name].by_version[version].add(release_file)
 
 
 def by_release_file_count(dep: Dependency) -> int:
