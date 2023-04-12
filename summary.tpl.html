@@ -95,6 +95,7 @@ A combined total of {{ total_versions }} distinct module versions were found. <b
       <th>Module Version</th>
       <th>EPICS Base</th>
       <th>Usage count</th>
+      <th>Release files</th>
     </tr>
   </thead>
   <tbody>
@@ -111,9 +112,12 @@ A combined total of {{ total_versions }} distinct module versions were found. <b
         </a>
       </td>
       <td>
+        {{ release_files | length}}
+      </td>
+      <td>
         <details>
           <summary>
-            {{ release_files | length}}
+             Expand&hellip;
           </summary>
           <ul>
           {% for release_file in release_files %}
