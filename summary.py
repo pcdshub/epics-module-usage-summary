@@ -8,6 +8,7 @@ import pathlib
 import re
 import string
 import sys
+import traceback
 from typing import ClassVar, DefaultDict, TypedDict, Union
 
 import jinja2
@@ -641,10 +642,9 @@ def main() -> tuple[Statistics, str]:
             print(type(ex).__name__, ex, file=sys.stderr)
         except SourceCodeMissingError as ex:
             print(type(ex).__name__, ex, file=sys.stderr)
-        except OSError as ex:
+        except OSError:
             # Unexpected, but likely due to stale NFS file handles
-            print(type(ex).__name__, ex, file=sys.stderr)
-            import traceback
+            print("Unexpected OSError caught during statistics gathering:", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
         else:
             release_file = release_files.get(release_file_path, None)
