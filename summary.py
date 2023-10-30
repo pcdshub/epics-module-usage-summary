@@ -8,7 +8,7 @@ import pathlib
 import re
 import string
 import sys
-from typing import ClassVar, DefaultDict, TypedDict
+from typing import ClassVar, DefaultDict, TypedDict, Union
 
 import jinja2
 
@@ -24,16 +24,23 @@ EPICS_SITE_TOP = pathlib.Path("/cds/group/pcds/epics")
 IOC_APPL_TOP = re.compile(r"IOC_APPL_TOP\s*=\s*(.*)$")
 
 
-def normalize_path(path: pathlib.Path) -> pathlib.Path:
+def normalize_path(path: Union[pathlib.Path, str]) -> pathlib.Path:
     """
     Normalize paths to use /cds/group/pcds instead of /reg/g/pcds.
+
+    Additionally, normalize /reg/neh/home directories as they are also
+    more likely to be stale.
     """
+    path = pathlib.Path(path)
     last_path = None
     while path != last_path:
         last_path = path
         path = path.expanduser().resolve()
         if path.parts[:4] == ("/", "reg", "g", "pcds"):
             path = pathlib.Path("/cds/group/pcds") / pathlib.Path(*path.parts[4:])
+        if path.parts[:3] == ("/", "reg", "neh") and path.parts[3].startswith("home"):
+            path = pathlib.Path(f"~{path.parts[4]}", *path.parts[5:])
+            path = path.expanduser()
 
     return path
 
@@ -159,6 +166,7 @@ class VersionInfo:
     def from_path(cls: type[Self], path: pathlib.Path) -> Self | None:
         path_str = str(path.resolve())
         path_str = path_str.replace("/reg/g/pcds", "/cds/group/pcds")
+        path_str = str(normalize_path(path_str))
         # TODO some sort of configuration
         for regex in cls._module_path_regexes_:
             match = regex.match(path_str)
@@ -321,6 +329,7 @@ class ReleaseFile:
 
     @classmethod
     def parse(cls: type[Self], filename: pathlib.Path) -> Self:
+        filename = normalize_path(filename)
         try:
             release_site = find_release_site_from_configure(filename.parent)
         except ValueError:
@@ -441,6 +450,7 @@ def get_release_file_from_ioc_appl_top(appl_top_file: pathlib.Path) -> pathlib.P
     -------
     pathlib.Path
     """
+    appl_top_file = normalize_path(appl_top_file)
     with open(appl_top_file) as fp:
         contents = fp.read()
 
@@ -449,8 +459,15 @@ def get_release_file_from_ioc_appl_top(appl_top_file: pathlib.Path) -> pathlib.P
         raise ValueError("IOC application top not found in IOC_APPL_TOP")
 
     ioc_appl_top = pathlib.Path(match.groups()[0])
-    if not ioc_appl_top.exists():
-        raise SourceCodeMissingError(f"No IOC application top: {ioc_appl_top}")
+    # Avoid stale NFS handles on /reg/g/pcds:
+    ioc_appl_top = normalize_path(ioc_appl_top)
+    try:
+        if not ioc_appl_top.exists():
+            raise SourceCodeMissingError(f"No IOC application top: {ioc_appl_top}")
+    except OSError as ex:
+        raise SourceCodeMissingError(
+            f"Filesystem issue while reading {ioc_appl_top}; marking as missing: {ex}"
+        )
 
     return ioc_appl_top / "configure" / "RELEASE"
 
@@ -467,7 +484,7 @@ def find_release_file_from_boot_path(boot_path: pathlib.Path) -> pathlib.Path:
     -------
     pathlib.Path
     """
-    path = boot_path.resolve()
+    path = normalize_path(boot_path.resolve())
     while len(path.parts) > 2:
         release_path = path / "configure" / "RELEASE"
         appl_top_file = path / "IOC_APPL_TOP"
@@ -516,7 +533,7 @@ def get_release_file_from_ioc(info: WhatrecordMetadata) -> pathlib.Path:
     pathlib.Path
         The RELEASE file path.
     """
-    boot_path = pathlib.Path(info["script"]).parent
+    boot_path = normalize_path(pathlib.Path(info["script"]).parent)
     if not boot_path.exists():
         raise BootPathDoesNotExist(f"Boot path does not exist; skipping: {boot_path}")
 
@@ -619,17 +636,30 @@ def main() -> tuple[Statistics, str]:
         try:
             release_file_path = get_release_file_from_ioc(ioc)
         except ExpectedFindReleaseFileError as ex:
-            print(ex, file=sys.stderr)
+            print(type(ex).__name__, ex, file=sys.stderr)
         except ReleaseFileNotFoundError as ex:
-            print(ex, file=sys.stderr)
+            print(type(ex).__name__, ex, file=sys.stderr)
         except SourceCodeMissingError as ex:
-            print(ex, file=sys.stderr)
+            print(type(ex).__name__, ex, file=sys.stderr)
+        except OSError as ex:
+            # Unexpected, but likely due to stale NFS file handles
+            print(type(ex).__name__, ex, file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
         else:
             release_file = release_files.get(release_file_path, None)
-            if release_file is None:
-                release_file = ReleaseFile.parse(release_file_path)
+            try:
+                if release_file is None:
+                    release_file = ReleaseFile.parse(release_file_path)
+            except Exception as ex:
+                print(
+                    f"Release file {release_file_path} parse failure: {ex}",
+                    file=sys.stderr,
+                )
+
+            if release_file is not None:
                 release_files[release_file_path] = release_file
-            add_to_stats(stats, release_file, ioc["name"])
+                add_to_stats(stats, release_file, ioc["name"])
 
     print_summary(stats)
 
